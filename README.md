@@ -74,6 +74,14 @@ Event-Management-System/
 ## 🖼️ Screenshots
 
 _Add screenshots or GIFs demonstrating your project in action here!_
+## 🖼️ Screenshots
+
+Dashboard :
+
+![User Event Dashboard](assets/iamge2.png)
+
+Event management:
+![Admin Dashboard](assets/image1.png)
 
 ---
 
