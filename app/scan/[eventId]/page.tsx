@@ -1,3 +1,4 @@
+
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
@@ -11,6 +12,9 @@ import { useParams, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import type { Event, Attendee } from "@/lib/types"
+
+// Note: Ensure Attendee type in lib/types.ts has checked_in_at?: string | null if null is intended
+// If deploying to Vercel's Edge Runtime, address warnings about Node.js APIs in Supabase libraries.
 
 export default function ScanPage() {
   const params = useParams()
@@ -29,11 +33,14 @@ export default function ScanPage() {
 
   const fetchEventData = async () => {
     const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    if (!user) {
+    if (userError || !user) {
+      toast({
+        title: "Authentication Error",
+        description: "Please log in to continue.",
+        variant: "destructive",
+      })
       router.push("/auth/login")
       return
     }
@@ -60,12 +67,19 @@ export default function ScanPage() {
       setEvent(eventData)
 
       // Get attendee stats
-      const { data: attendees } = await supabase.from("attendees").select("*").eq("event_id", eventId)
+      const { data: attendees, error: attendeesError } = await supabase
+        .from("attendees")
+        .select("*")
+        .eq("event_id", eventId)
+
+      if (attendeesError) {
+        throw attendeesError
+      }
 
       if (attendees) {
         setStats({
           total: attendees.length,
-          checkedIn: attendees.filter((a) => a.checked_in).length,
+          checkedIn: attendees.filter((a: Attendee) => a.checked_in).length,
         })
       }
     } catch (error) {
@@ -93,19 +107,20 @@ export default function ScanPage() {
         .single()
 
       if (findError || !attendee) {
-        const errorResult = {
+        const errorResult: Attendee & { scanResult: "error" } = {
           id: `error-${Date.now()}`,
           name: "Unknown",
           email: "",
           qr_code: qrCode,
           checked_in: false,
-          scanResult: "error" as const,
+          scanResult: "error",
           event_id: eventId,
-          phone: null,
-          checked_in_at: null,
+          phone: undefined,
+          checked_in_at: undefined, // Changed from null to undefined to match string | undefined
           registered_at: new Date().toISOString(),
         }
         setRecentScans((prev) => [errorResult, ...prev.slice(0, 9)])
+
         toast({
           title: "Invalid QR Code",
           description: "This QR code is not valid for this event.",
@@ -116,9 +131,9 @@ export default function ScanPage() {
 
       // Check if already checked in
       if (attendee.checked_in) {
-        const duplicateResult = {
+        const duplicateResult: Attendee & { scanResult: "duplicate" } = {
           ...attendee,
-          scanResult: "duplicate" as const,
+          scanResult: "duplicate",
         }
         setRecentScans((prev) => [duplicateResult, ...prev.slice(0, 9)])
         toast({
@@ -143,11 +158,11 @@ export default function ScanPage() {
       }
 
       // Success
-      const successResult = {
+      const successResult: Attendee & { scanResult: "success" } = {
         ...attendee,
         checked_in: true,
         checked_in_at: new Date().toISOString(),
-        scanResult: "success" as const,
+        scanResult: "success",
       }
       setRecentScans((prev) => [successResult, ...prev.slice(0, 9)])
       setStats((prev) => ({ ...prev, checkedIn: prev.checkedIn + 1 }))
